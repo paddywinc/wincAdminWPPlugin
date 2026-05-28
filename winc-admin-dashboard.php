@@ -3,7 +3,7 @@
 /**
  * Plugin Name: WINC Admin Dashboard
  * Plugin URI:  https://wincstudio.co.uk
- * Description: Adds a WINC Studio dashboard widget showing the site's current care plan level.
+ * Description: WordPress plugin to sync with WINC Admin.
  * Version:     1.1.0
  * Author:      WINC Studio
  * Author URI:  https://wincstudio.co.uk
