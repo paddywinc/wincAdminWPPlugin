@@ -1,10 +1,10 @@
 <?php
 
 /**
- * Plugin Name: WINC Studio Dashboard
+ * Plugin Name: WINC Admin Dashboard
  * Plugin URI:  https://wincstudio.co.uk
  * Description: Adds a WINC Studio dashboard widget showing the site's current care plan level.
- * Version:     1.0.0
+ * Version:     1.1.0
  * Author:      WINC Studio
  * Author URI:  https://wincstudio.co.uk
  * License:     GPL-2.0-or-later
@@ -14,6 +14,19 @@
 if (! defined('ABSPATH')) {
     exit;
 }
+
+// Auto-updater via GitHub.
+require_once __DIR__ . '/vendor/autoload.php';
+
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+$winc_updater = PucFactory::buildUpdateChecker(
+    'https://github.com/paddywinc/wincAdminWPPlugin',
+    __FILE__,
+    'winc-admin-dashboard'
+);
+
+$winc_updater->setBranch('main');
 
 function winc_dashboard_widget()
 {
