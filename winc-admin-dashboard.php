@@ -4,7 +4,7 @@
  * Plugin Name: WINC Admin Dashboard
  * Plugin URI:  https://wincstudio.co.uk
  * Description: WordPress plugin to sync with WINC Admin.
- * Version:     1.4.0
+ * Version:     1.5.0
  * Author:      WINC Studio
  * Author URI:  https://wincstudio.co.uk
  * License:     GPL-2.0-or-later
@@ -29,6 +29,15 @@ $winc_updater = PucFactory::buildUpdateChecker(
 $winc_updater->setBranch('main');
 
 
+// ─── API key helper ──────────────────────────────────────────────────────────
+
+function winc_api_headers()
+{
+    $key = get_option('winc_api_key', '');
+    return $key ? ['headers' => ['X-API-Key' => $key]] : [];
+}
+
+
 // ─── Data helpers ─────────────────────────────────────────────────────────────
 
 function winc_get_plan_data()
@@ -46,7 +55,8 @@ function winc_get_plan_data()
         return $plan;
     }
 
-    $response = wp_remote_get('https://admin.wincstudio.co.uk/api/urls', ['timeout' => 5]);
+    $args     = array_merge(['timeout' => 5], winc_api_headers());
+    $response = wp_remote_get('https://admin.wincstudio.co.uk/api/urls', $args);
 
     if (is_wp_error($response)) {
         $plan = false;
@@ -131,7 +141,8 @@ function winc_get_uptime_history()
     }
 
     $api_url  = 'https://admin.wincstudio.co.uk/api/uptime/' . rawurlencode($site_url) . '?days=7';
-    $response = wp_remote_get($api_url, ['timeout' => 5]);
+    $args     = array_merge(['timeout' => 5], winc_api_headers());
+    $response = wp_remote_get($api_url, $args);
 
     if (is_wp_error($response)) {
         return [];
@@ -688,7 +699,69 @@ add_action('admin_menu', function () {
         $icon,
         3
     );
+
+    add_submenu_page(
+        'winc-admin',
+        'WINC Settings',
+        'Settings',
+        'manage_options',
+        'winc-settings',
+        'winc_settings_page'
+    );
 });
+
+add_action('admin_init', function () {
+    register_setting('winc_settings', 'winc_api_key', [
+        'type'              => 'string',
+        'sanitize_callback' => 'sanitize_text_field',
+        'default'           => '',
+    ]);
+});
+
+function winc_settings_page()
+{
+    if (! current_user_can('manage_options')) {
+        return;
+    }
+    ?>
+    <div class="wrap">
+        <h1>WINC Settings</h1>
+        <form method="post" action="options.php">
+            <?php settings_fields('winc_settings'); ?>
+            <table class="form-table" role="presentation">
+                <tr>
+                    <th scope="row"><label for="winc_api_key">API Key</label></th>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:8px;max-width:400px">
+                            <input
+                                type="password"
+                                id="winc_api_key"
+                                name="winc_api_key"
+                                value="<?php echo esc_attr(get_option('winc_api_key', '')); ?>"
+                                class="regular-text"
+                                autocomplete="new-password"
+                            />
+                            <button type="button" id="winc-toggle-key" class="button">
+                                Show
+                            </button>
+                        </div>
+                        <p class="description">Your WINC Admin API key. Keep this secret.</p>
+                        <script>
+                        document.getElementById('winc-toggle-key').addEventListener('click', function () {
+                            var input = document.getElementById('winc_api_key');
+                            var isHidden = input.type === 'password';
+                            input.type = isHidden ? 'text' : 'password';
+                            this.textContent = isHidden ? 'Hide' : 'Show';
+                        });
+                        </script>
+                    </td>
+                </tr>
+            </table>
+            <?php submit_button('Save API Key'); ?>
+        </form>
+    </div>
+    <?php
+}
 
 function winc_admin_page()
 {
@@ -700,6 +773,15 @@ function winc_admin_page()
     $icons    = winc_plan_icons();
     ?>
     <div class="wrap winc-page">
+
+        <?php if (current_user_can('manage_options') && ! get_option('winc_api_key', '')) : ?>
+            <div class="notice notice-warning">
+                <p>
+                    <strong>WINC Admin:</strong> No API key set.
+                    <a href="<?php echo esc_url(admin_url('admin.php?page=winc-settings')); ?>">Add your API key in Settings &rarr;</a>
+                </p>
+            </div>
+        <?php endif; ?>
 
         <div class="winc-page-hero">
             <p class="winc-wordmark">WINC Admin</p>
