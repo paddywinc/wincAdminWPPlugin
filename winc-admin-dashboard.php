@@ -4,7 +4,7 @@
  * Plugin Name: WINC Admin Dashboard
  * Plugin URI:  https://wincstudio.co.uk
  * Description: WordPress plugin to sync with WINC Admin.
- * Version:     1.3.0
+ * Version:     1.4.0
  * Author:      WINC Studio
  * Author URI:  https://wincstudio.co.uk
  * License:     GPL-2.0-or-later
@@ -807,78 +807,114 @@ function winc_admin_page()
                         </div>
                     </div>
                     <script>
-                    document.addEventListener('DOMContentLoaded', function () {
-                        var timestamps = <?php echo wp_json_encode($chart_timestamps); ?>;
-                        var msValues   = <?php echo wp_json_encode($chart_ms); ?>;
-                        var upValues   = <?php echo wp_json_encode($chart_status); ?>;
+                        document.addEventListener('DOMContentLoaded', function() {
+                            var timestamps = <?php echo wp_json_encode($chart_timestamps); ?>;
+                            var msValues = <?php echo wp_json_encode($chart_ms); ?>;
+                            var upValues = <?php echo wp_json_encode($chart_status); ?>;
 
-                        var sharedAxes = [
-                            {
-                                stroke: '#888',
-                                ticks:  { stroke: 'transparent' },
-                                grid:   { show: false },
-                                font:   '11px -apple-system,BlinkMacSystemFont,sans-serif',
-                            },
-                            {
-                                stroke: '#888',
-                                ticks:  { stroke: 'transparent' },
-                                grid:   { stroke: '#f0f0f0', width: 1 },
-                                font:   '11px -apple-system,BlinkMacSystemFont,sans-serif',
-                            },
-                        ];
-
-                        // Response time chart
-                        var elMs = document.getElementById('winc-chart-ms');
-                        new WincAdmin.uPlot({
-                            width:  elMs.offsetWidth || 340,
-                            height: 140,
-                            cursor: { show: false },
-                            legend: { show: false },
-                            scales: { x: { time: true } },
-                            axes:   sharedAxes,
-                            series: [
-                                {},
-                                { stroke: '#00e7a2', width: 2, fill: 'transparent' },
-                            ],
-                        }, [timestamps, msValues], elMs);
-
-                        // Uptime chart
-                        var elUp = document.getElementById('winc-chart-uptime');
-                        new WincAdmin.uPlot({
-                            width:  elUp.offsetWidth || 340,
-                            height: 140,
-                            cursor: { show: false },
-                            legend: { show: false },
-                            scales: { x: { time: true }, y: { range: [0, 1] } },
-                            axes: [
-                                sharedAxes[0],
+                            var sharedAxes = [{
+                                    stroke: '#888',
+                                    ticks: {
+                                        stroke: 'transparent'
+                                    },
+                                    grid: {
+                                        show: false
+                                    },
+                                    font: '11px -apple-system,BlinkMacSystemFont,sans-serif',
+                                },
                                 {
                                     stroke: '#888',
-                                    ticks:  { stroke: 'transparent' },
-                                    grid:   { stroke: '#f0f0f0', width: 1 },
-                                    font:   '11px -apple-system,BlinkMacSystemFont,sans-serif',
-                                    values: (u, vals) => vals.map(v => v === 1 ? 'Up' : v === 0 ? 'Down' : ''),
-                                    splits: [0, 1],
-                                },
-                            ],
-                            series: [
-                                {},
-                                {
-                                    stroke: '#00e7a2',
-                                    width:  2,
-                                    fill:   (u, idx) => {
-                                        var ctx = u.ctx;
-                                        var g = ctx.createLinearGradient(0, u.bbox.top, 0, u.bbox.top + u.bbox.height);
-                                        g.addColorStop(0, 'rgba(0,231,162,0.15)');
-                                        g.addColorStop(1, 'rgba(0,231,162,0)');
-                                        return g;
+                                    ticks: {
+                                        stroke: 'transparent'
                                     },
-                                    points: { show: false },
-                                    spanGaps: false,
+                                    grid: {
+                                        stroke: '#f0f0f0',
+                                        width: 1
+                                    },
+                                    font: '11px -apple-system,BlinkMacSystemFont,sans-serif',
                                 },
-                            ],
-                        }, [timestamps, upValues], elUp);
-                    });
+                            ];
+
+                            // Response time chart
+                            var elMs = document.getElementById('winc-chart-ms');
+                            new WincAdmin.uPlot({
+                                width: elMs.offsetWidth || 340,
+                                height: 140,
+                                cursor: {
+                                    show: false
+                                },
+                                legend: {
+                                    show: false
+                                },
+                                scales: {
+                                    x: {
+                                        time: true
+                                    }
+                                },
+                                axes: sharedAxes,
+                                series: [{},
+                                    {
+                                        stroke: '#00e7a2',
+                                        width: 2,
+                                        fill: 'transparent'
+                                    },
+                                ],
+                            }, [timestamps, msValues], elMs);
+
+                            // Uptime chart
+                            var elUp = document.getElementById('winc-chart-uptime');
+                            new WincAdmin.uPlot({
+                                width: elUp.offsetWidth || 340,
+                                height: 140,
+                                cursor: {
+                                    show: false
+                                },
+                                legend: {
+                                    show: false
+                                },
+                                scales: {
+                                    x: {
+                                        time: true
+                                    },
+                                    y: {
+                                        range: [0, 1]
+                                    }
+                                },
+                                axes: [
+                                    sharedAxes[0],
+                                    {
+                                        stroke: '#888',
+                                        ticks: {
+                                            stroke: 'transparent'
+                                        },
+                                        grid: {
+                                            stroke: '#f0f0f0',
+                                            width: 1
+                                        },
+                                        font: '11px -apple-system,BlinkMacSystemFont,sans-serif',
+                                        values: (u, vals) => vals.map(v => v === 1 ? 'Up' : v === 0 ? 'Down' : ''),
+                                        splits: [0, 1],
+                                    },
+                                ],
+                                series: [{},
+                                    {
+                                        stroke: '#00e7a2',
+                                        width: 2,
+                                        fill: (u, idx) => {
+                                            var ctx = u.ctx;
+                                            var g = ctx.createLinearGradient(0, u.bbox.top, 0, u.bbox.top + u.bbox.height);
+                                            g.addColorStop(0, 'rgba(0,231,162,0.15)');
+                                            g.addColorStop(1, 'rgba(0,231,162,0)');
+                                            return g;
+                                        },
+                                        points: {
+                                            show: false
+                                        },
+                                        spanGaps: false,
+                                    },
+                                ],
+                            }, [timestamps, upValues], elUp);
+                        });
                     </script>
                 <?php else : ?>
                     <p style="margin-top:20px;color:#888;font-size:15px">No data yet.</p>
