@@ -773,16 +773,18 @@ function winc_admin_page()
             $history    = winc_get_uptime_history();
             $chart_data = [];
             foreach ($history as $point) {
-                if (isset($point['checked_at'], $point['response_time_ms'])) {
+                if (isset($point['checked_at'], $point['status'])) {
                     $chart_data[] = [
-                        'ts' => strtotime($point['checked_at']),
-                        'ms' => (float) $point['response_time_ms'],
+                        'ts'     => strtotime($point['checked_at']),
+                        'ms'     => isset($point['response_time_ms']) ? (float) $point['response_time_ms'] : null,
+                        'status' => $point['status'] === 'up' ? 1 : 0,
                     ];
                 }
             }
             usort($chart_data, fn($a, $b) => $a['ts'] <=> $b['ts']);
             $chart_timestamps = array_column($chart_data, 'ts');
-            $chart_values     = array_column($chart_data, 'ms');
+            $chart_ms         = array_column($chart_data, 'ms');
+            $chart_status     = array_column($chart_data, 'status');
         ?>
             <div class="winc-card">
                 <h3>Uptime monitoring</h3>
@@ -794,30 +796,69 @@ function winc_admin_page()
                     </div>
                 </div>
                 <?php if (! empty($chart_data)) : ?>
-                    <div id="winc-uptime-chart" style="margin-top:24px"></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px">
+                        <div>
+                            <p style="font-size:13px;color:#888;margin:0 0 8px">Response time (ms)</p>
+                            <div id="winc-chart-ms"></div>
+                        </div>
+                        <div>
+                            <p style="font-size:13px;color:#888;margin:0 0 8px">Uptime</p>
+                            <div id="winc-chart-uptime"></div>
+                        </div>
+                    </div>
                     <script>
                     document.addEventListener('DOMContentLoaded', function () {
-                        var el = document.getElementById('winc-uptime-chart');
-                        var opts = {
-                            width:  el.offsetWidth || 700,
-                            height: 160,
+                        var timestamps = <?php echo wp_json_encode($chart_timestamps); ?>;
+                        var msValues   = <?php echo wp_json_encode($chart_ms); ?>;
+                        var upValues   = <?php echo wp_json_encode($chart_status); ?>;
+
+                        var sharedAxes = [
+                            {
+                                stroke: '#888',
+                                ticks:  { stroke: 'transparent' },
+                                grid:   { show: false },
+                                font:   '11px -apple-system,BlinkMacSystemFont,sans-serif',
+                            },
+                            {
+                                stroke: '#888',
+                                ticks:  { stroke: 'transparent' },
+                                grid:   { stroke: '#f0f0f0', width: 1 },
+                                font:   '11px -apple-system,BlinkMacSystemFont,sans-serif',
+                            },
+                        ];
+
+                        // Response time chart
+                        var elMs = document.getElementById('winc-chart-ms');
+                        new WincAdmin.uPlot({
+                            width:  elMs.offsetWidth || 340,
+                            height: 140,
                             cursor: { show: false },
                             legend: { show: false },
                             scales: { x: { time: true } },
+                            axes:   sharedAxes,
+                            series: [
+                                {},
+                                { stroke: '#00e7a2', width: 2, fill: 'transparent' },
+                            ],
+                        }, [timestamps, msValues], elMs);
+
+                        // Uptime chart
+                        var elUp = document.getElementById('winc-chart-uptime');
+                        new WincAdmin.uPlot({
+                            width:  elUp.offsetWidth || 340,
+                            height: 140,
+                            cursor: { show: false },
+                            legend: { show: false },
+                            scales: { x: { time: true }, y: { range: [0, 1] } },
                             axes: [
-                                {
-                                    stroke: '#888',
-                                    ticks:  { stroke: 'transparent' },
-                                    grid:   { show: false },
-                                    font:   '12px -apple-system,BlinkMacSystemFont,sans-serif',
-                                },
+                                sharedAxes[0],
                                 {
                                     stroke: '#888',
                                     ticks:  { stroke: 'transparent' },
                                     grid:   { stroke: '#f0f0f0', width: 1 },
-                                    font:   '12px -apple-system,BlinkMacSystemFont,sans-serif',
-                                    label:  'ms',
-                                    labelFont: '11px -apple-system,BlinkMacSystemFont,sans-serif',
+                                    font:   '11px -apple-system,BlinkMacSystemFont,sans-serif',
+                                    values: (u, vals) => vals.map(v => v === 1 ? 'Up' : v === 0 ? 'Down' : ''),
+                                    splits: [0, 1],
                                 },
                             ],
                             series: [
@@ -825,11 +866,18 @@ function winc_admin_page()
                                 {
                                     stroke: '#00e7a2',
                                     width:  2,
-                                    fill:   'transparent',
+                                    fill:   (u, idx) => {
+                                        var ctx = u.ctx;
+                                        var g = ctx.createLinearGradient(0, u.bbox.top, 0, u.bbox.top + u.bbox.height);
+                                        g.addColorStop(0, 'rgba(0,231,162,0.15)');
+                                        g.addColorStop(1, 'rgba(0,231,162,0)');
+                                        return g;
+                                    },
+                                    points: { show: false },
+                                    spanGaps: false,
                                 },
                             ],
-                        };
-                        new WincAdmin.uPlot(opts, [<?php echo wp_json_encode($chart_timestamps); ?>, <?php echo wp_json_encode($chart_values); ?>], el);
+                        }, [timestamps, upValues], elUp);
                     });
                     </script>
                 <?php else : ?>
