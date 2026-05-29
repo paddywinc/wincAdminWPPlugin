@@ -4,7 +4,7 @@
  * Plugin Name: WINC Admin Dashboard
  * Plugin URI:  https://wincstudio.co.uk
  * Description: WordPress plugin to sync with WINC Admin.
- * Version:     1.5.0
+ * Version:     1.6.0
  * Author:      WINC Studio
  * Author URI:  https://wincstudio.co.uk
  * License:     GPL-2.0-or-later
@@ -27,6 +27,55 @@ $winc_updater = PucFactory::buildUpdateChecker(
 );
 
 $winc_updater->setBranch('main');
+
+
+// ─── Activation: auto-register and fetch API key ──────────────────────────────
+
+register_activation_hook(__FILE__, function () {
+    if (get_option('winc_api_key', '') !== '') {
+        return;
+    }
+
+    $response = wp_remote_post('https://admin.wincstudio.co.uk/api/register', [
+        'timeout' => 10,
+        'body'    => ['url' => home_url()],
+    ]);
+
+    if (is_wp_error($response)) {
+        set_transient('winc_activation_notice', 'connection_failed', 60);
+        return;
+    }
+
+    $code = wp_remote_retrieve_response_code($response);
+
+    if ($code === 403) {
+        set_transient('winc_activation_notice', 'not_registered', 60);
+        return;
+    }
+
+    if ($code === 200) {
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if (! empty($body['api_key'])) {
+            update_option('winc_api_key', sanitize_text_field($body['api_key']));
+        }
+    }
+});
+
+add_action('admin_notices', function () {
+    $notice = get_transient('winc_activation_notice');
+    if (! $notice) {
+        return;
+    }
+    delete_transient('winc_activation_notice');
+
+    if ($notice === 'not_registered') {
+        $message = 'This site is not registered with WINC Studio. Please contact your account manager.';
+    } else {
+        $settings_url = esc_url(admin_url('admin.php?page=winc-settings'));
+        $message      = 'Unable to connect to WINC Studio. Please check your API key in <a href="' . $settings_url . '">WINC &rarr; Settings</a>.';
+    }
+    echo '<div class="notice notice-error"><p><strong>WINC Admin:</strong> ' . wp_kses($message, ['a' => ['href' => []]]) . '</p></div>';
+});
 
 
 // ─── API key helper ──────────────────────────────────────────────────────────
@@ -723,45 +772,138 @@ function winc_settings_page()
     if (! current_user_can('manage_options')) {
         return;
     }
+    $has_key = get_option('winc_api_key', '') !== '';
     ?>
-    <div class="wrap">
-        <h1>WINC Settings</h1>
-        <form method="post" action="options.php">
-            <?php settings_fields('winc_settings'); ?>
-            <table class="form-table" role="presentation">
-                <tr>
-                    <th scope="row"><label for="winc_api_key">API Key</label></th>
-                    <td>
-                        <div style="display:flex;align-items:center;gap:8px;max-width:400px">
-                            <input
-                                type="password"
-                                id="winc_api_key"
-                                name="winc_api_key"
-                                value="<?php echo esc_attr(get_option('winc_api_key', '')); ?>"
-                                class="regular-text"
-                                autocomplete="new-password"
-                            />
-                            <button type="button" id="winc-toggle-key" class="button">
-                                Show
-                            </button>
-                        </div>
-                        <p class="description">Your WINC Admin API key. Keep this secret.</p>
-                        <script>
-                        document.getElementById('winc-toggle-key').addEventListener('click', function () {
-                            var input = document.getElementById('winc_api_key');
-                            var isHidden = input.type === 'password';
-                            input.type = isHidden ? 'text' : 'password';
-                            this.textContent = isHidden ? 'Hide' : 'Show';
-                        });
-                        </script>
-                    </td>
-                </tr>
-            </table>
-            <?php submit_button('Save API Key'); ?>
-        </form>
+    <div class="wrap winc-page">
+
+        <div class="winc-page-hero" style="border-radius:6px;margin-bottom:16px">
+            <p class="winc-wordmark">WINC Admin</p>
+            <h1>Settings</h1>
+        </div>
+
+        <?php if (isset($_GET['settings-updated'])) : ?>
+            <div class="notice notice-success is-dismissible">
+                <p>API key saved.</p>
+            </div>
+        <?php endif; ?>
+
+        <div class="winc-card" style="border-radius:6px">
+            <h3>API Key</h3>
+            <p>Your WINC Admin API key authenticates requests to the WINC platform. Keep it secret.</p>
+            <form method="post" action="options.php">
+                <?php settings_fields('winc_settings'); ?>
+                <div style="display:flex;align-items:center;gap:8px;max-width:420px">
+                    <input
+                        type="password"
+                        id="winc_api_key"
+                        name="winc_api_key"
+                        value="<?php echo esc_attr(get_option('winc_api_key', '')); ?>"
+                        class="regular-text"
+                        style="flex:1"
+                        autocomplete="new-password" />
+                    <button type="button" id="winc-toggle-key" class="button">Show</button>
+                </div>
+                <div class="winc-actions">
+                    <?php submit_button('Save API Key', 'primary', 'submit', false); ?>
+                </div>
+            </form>
+            <script>
+                document.getElementById('winc-toggle-key').addEventListener('click', function() {
+                    var input = document.getElementById('winc_api_key');
+                    var hidden = input.type === 'password';
+                    input.type = hidden ? 'text' : 'password';
+                    this.textContent = hidden ? 'Hide' : 'Show';
+                });
+            </script>
+        </div>
+
+        <div class="winc-card winc-card--muted" style="border-radius:6px">
+            <h3>Register site</h3>
+            <p>Automatically register this site with WINC Studio and retrieve your API key.</p>
+            <div class="winc-actions" style="align-items:center">
+                <button type="button" id="winc-register-btn" class="winc-btn">Register site</button>
+                <span id="winc-register-notice" style="font-size:15px;color:#555"></span>
+            </div>
+            <?php if ($has_key) : ?>
+                <p style="margin-top:12px;font-size:14px;color:#888">
+                    Site already registered — click to re-register if you have changed domains.
+                </p>
+            <?php endif; ?>
+        </div>
+
     </div>
-    <?php
+    <script>
+        document.getElementById('winc-register-btn').addEventListener('click', function() {
+            var btn = this;
+            var notice = document.getElementById('winc-register-notice');
+            btn.disabled = true;
+            btn.textContent = 'Registering\u2026';
+            notice.textContent = '';
+
+            var data = new FormData();
+            data.append('action', 'winc_register_site');
+            data.append('nonce', <?php echo wp_json_encode(wp_create_nonce('winc_register_site')); ?>);
+
+            fetch(<?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>, {
+                    method: 'POST',
+                    body: data,
+                })
+                .then(function(r) {
+                    return r.json();
+                })
+                .then(function(res) {
+                    btn.disabled = false;
+                    btn.textContent = 'Register site';
+                    if (res.success) {
+                        notice.style.color = '#00b87a';
+                        notice.textContent = 'Site registered successfully \u2014 API key saved.';
+                    } else {
+                        notice.style.color = '#cc1818';
+                        notice.textContent = res.data || 'Something went wrong.';
+                    }
+                })
+                .catch(function() {
+                    btn.disabled = false;
+                    btn.textContent = 'Register site';
+                    notice.style.color = '#cc1818';
+                    notice.textContent = 'Unable to connect to WINC Studio \u2014 please try again or enter your API key manually.';
+                });
+        });
+    </script>
+<?php
 }
+
+add_action('wp_ajax_winc_register_site', function () {
+    if (! current_user_can('manage_options')) {
+        wp_send_json_error('Unauthorised.', 403);
+    }
+
+    check_ajax_referer('winc_register_site', 'nonce');
+
+    $response = wp_remote_post('https://admin.wincstudio.co.uk/api/register', [
+        'timeout' => 10,
+        'body'    => ['url' => home_url()],
+    ]);
+
+    if (is_wp_error($response)) {
+        wp_send_json_error('Unable to connect to WINC Studio \u2014 please try again or enter your API key manually.');
+    }
+
+    $code = wp_remote_retrieve_response_code($response);
+
+    if ($code === 403) {
+        wp_send_json_error('This site is not registered with WINC Studio. Please contact your account manager.');
+    }
+
+    $body = json_decode(wp_remote_retrieve_body($response), true);
+
+    if ($code === 200 && ! empty($body['api_key'])) {
+        update_option('winc_api_key', sanitize_text_field($body['api_key']));
+        wp_send_json_success();
+    }
+
+    wp_send_json_error('Unexpected response from WINC Studio. Please try again.');
+});
 
 function winc_admin_page()
 {
@@ -771,7 +913,7 @@ function winc_admin_page()
     $desc     = winc_plan_description($level);
     $features = winc_plan_features($level);
     $icons    = winc_plan_icons();
-    ?>
+?>
     <div class="wrap winc-page">
 
         <?php if (current_user_can('manage_options') && ! get_option('winc_api_key', '')) : ?>
