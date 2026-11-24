@@ -1,6 +1,6 @@
 {
   "name": "winc-admin",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "private": true,
   "scripts": {
     "dev": "bunx vite build --watch",
