@@ -1,0 +1,50 @@
+name: Release
+
+# Publishes a GitHub release whenever the plugin version in
+# winc-admin-dashboard.php is bumped and pushed to main. The WordPress
+# update checker on client sites reads these releases.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Read and check versions
+        id: v
+        run: |
+          HEADER=$(grep -m1 -E '^\s*\*\s*Version:' winc-admin-dashboard.php | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]')
+          PKG=$(node -p "require('./package.json').version")
+          echo "Plugin header: $HEADER / package.json: $PKG"
+          if [ -z "$HEADER" ]; then echo "::error::No Version header found"; exit 1; fi
+          if [ "$HEADER" != "$PKG" ]; then
+            echo "::error::Version mismatch: plugin header is $HEADER but package.json is $PKG"
+            exit 1
+          fi
+          echo "version=$HEADER" >> "$GITHUB_OUTPUT"
+
+      - name: PHP syntax check
+        run: |
+          for f in winc-admin-dashboard.php includes/*.php; do php -l "$f"; done
+
+      - name: Publish release if this version is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.v.outputs.version }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists - nothing to do."
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "${{ steps.v.outputs.version }}" --generate-notes
+          fi

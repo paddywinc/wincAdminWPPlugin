@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "bunx vite build --watch",
     "build": "bunx vite build",
-    "zip": "bun run build && bash scripts/zip.sh"
+    "zip": "bun run build && bash scripts/zip.sh",
+    "release": "bash scripts/release.sh"
   },
   "dependencies": {
     "uplot": "^1.6.31"
