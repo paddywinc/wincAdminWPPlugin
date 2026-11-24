@@ -725,7 +725,7 @@ add_action('admin_notices', function () {
                 <p class="winc-hero__desc">You don't have a WINC care plan yet. Get in touch to keep your site secure, supported and growing.</p>
             </div>
             <div class="winc-hero__right">
-                <a href="https://wincstudio.co.uk/maintenance" target="_blank" rel="noopener" class="winc-btn">Get a care plan &rarr;</a>
+                <a href="<?php echo esc_url(winc_upgrade_mailto('Care plan enquiry')); ?>" class="winc-btn">Get a care plan &rarr;</a>
             </div>
         </div>
     <?php endif;
@@ -771,7 +771,7 @@ function winc_dashboard_widget_content()
     <?php else : ?>
         <p><strong>No WINC care plan found.</strong></p>
         <p class="winc-widget-footer">
-            <a href="https://wincstudio.co.uk/maintenance" target="_blank" rel="noopener">Find out about our care plans &rarr;</a>
+            <a href="<?php echo esc_url(winc_upgrade_mailto('Care plan enquiry')); ?>">Ask about our care plans &rarr;</a>
         </p>
     <?php endif;
 }
@@ -841,7 +841,7 @@ function winc_settings_page()
                 <p>Your WINC Admin API key authenticates requests to the WINC platform. Keep it secret.</p>
                 <form method="post" action="options.php">
                     <?php settings_fields('winc_settings'); ?>
-                    <div style="display:flex;align-items:stretch;gap:10px">
+                    <div style="display:flex;align-items:stretch;gap:10px;margin-bottom:10px">
                         <input
                             type="password"
                             id="winc_api_key"
@@ -999,6 +999,46 @@ add_action('wp_ajax_winc_auth_token', function () {
     wp_send_json_error('Unexpected response from WINC Studio. Please try again.');
 });
 
+// ─── Upgrade requests ────────────────────────────────────────────────────────
+
+/**
+ * mailto: link used where the site has no WINC Admin registration (and so no API key).
+ */
+function winc_upgrade_mailto($subject)
+{
+    return 'mailto:hello@wincstudio.co.uk?subject=' . rawurlencode($subject);
+}
+
+add_action('wp_ajax_winc_request_upgrade', function () {
+    if (! current_user_can('manage_options')) {
+        wp_send_json_error('Unauthorised.', 403);
+    }
+
+    check_ajax_referer('winc_request_upgrade', 'nonce');
+
+    $args = array_merge(
+        ['timeout' => 15, 'body' => ['plan' => isset($_POST['plan']) ? absint($_POST['plan']) : 0]],
+        winc_api_headers()
+    );
+
+    $response = wp_remote_post('https://admin.wincstudio.co.uk/api/upgrade-request', $args);
+
+    if (is_wp_error($response)) {
+        wp_send_json_error('Unable to reach WINC Studio — please try again.');
+    }
+
+    $code = wp_remote_retrieve_response_code($response);
+    $body = json_decode(wp_remote_retrieve_body($response), true);
+    $msg  = is_array($body) && ! empty($body['message']) ? sanitize_text_field($body['message']) : 'Something went wrong — please try again.';
+
+    if ($code === 200) {
+        wp_send_json_success($msg);
+    }
+
+    wp_send_json_error($msg);
+});
+
+
 function winc_admin_page()
 {
     $plan     = winc_get_plan_data();
@@ -1125,8 +1165,8 @@ function winc_admin_page()
                                 <li><?php echo esc_html($feature); ?></li>
                             <?php endforeach; ?>
                         </ul>
-                        <a href="https://wincstudio.co.uk/maintenance" target="_blank" rel="noopener" class="<?php echo $btn_class; ?>">
-                            Find out more &rarr;
+                        <a href="<?php echo esc_url(winc_upgrade_mailto('Care plan enquiry: ' . $plan_data['label'])); ?>" class="<?php echo $btn_class; ?>">
+                            Enquire about <?php echo esc_html($plan_data['label']); ?> &rarr;
                         </a>
                     </div>
                 <?php endforeach; ?>
@@ -1308,8 +1348,9 @@ function winc_admin_page()
                         </ul>
                     <?php endif; ?>
                     <div class="winc-actions">
-                        <a href="https://wincstudio.co.uk/support" target="_blank" rel="noopener" class="winc-btn">Find out more &rarr;</a>
+                        <button type="button" class="winc-btn winc-upgrade-btn" data-plan="<?php echo esc_attr($next_level); ?>">Request upgrade &rarr;</button>
                     </div>
+                    <p class="winc-upgrade-msg" role="status" style="margin:12px 0 0;font-size:15px;"></p>
                 </div>
                 <div class="winc-card winc-card--muted" style="margin-bottom:0">
                     <h3>Need help?</h3>
@@ -1320,6 +1361,42 @@ function winc_admin_page()
                     </div>
                 </div>
             </div>
+            <script>
+                (function() {
+                    var btn = document.querySelector('.winc-upgrade-btn');
+                    if (!btn) return;
+                    var msg = document.querySelector('.winc-upgrade-msg');
+                    btn.addEventListener('click', function() {
+                        btn.disabled = true;
+                        var data = new FormData();
+                        data.append('action', 'winc_request_upgrade');
+                        data.append('nonce', <?php echo wp_json_encode(wp_create_nonce('winc_request_upgrade')); ?>);
+                        data.append('plan', btn.dataset.plan);
+                        fetch(<?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>, {
+                                method: 'POST',
+                                body: data,
+                                credentials: 'same-origin'
+                            })
+                            .then(function(r) {
+                                return r.json();
+                            })
+                            .then(function(res) {
+                                msg.textContent = res.data || (res.success ? 'Request sent.' : 'Something went wrong.');
+                                msg.style.color = res.success ? '#0a7d4f' : '#b32d2e';
+                                if (res.success) {
+                                    btn.style.display = 'none';
+                                } else {
+                                    btn.disabled = false;
+                                }
+                            })
+                            .catch(function() {
+                                msg.textContent = 'Something went wrong \u2014 please try again.';
+                                msg.style.color = '#b32d2e';
+                                btn.disabled = false;
+                            });
+                    });
+                })();
+            </script>
         <?php else : ?>
             <div class="winc-card winc-card--muted">
                 <h3>Need help?</h3>
