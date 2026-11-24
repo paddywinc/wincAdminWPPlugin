@@ -4,7 +4,7 @@
  * Plugin Name: WINC Admin Dashboard
  * Plugin URI:  https://wincstudio.co.uk
  * Description: WordPress plugin to sync with WINC Admin.
- * Version:     1.6.0
+ * Version:     1.8.0
  * Author:      WINC Studio
  * Author URI:  https://wincstudio.co.uk
  * License:     GPL-2.0-or-later
@@ -27,6 +27,9 @@ $winc_updater = PucFactory::buildUpdateChecker(
 );
 
 $winc_updater->setBranch('main');
+
+// Remote plugin list/update endpoints used by WINC Admin.
+require_once __DIR__ . '/includes/agent.php';
 
 
 // ─── Activation: auto-register and fetch API key ──────────────────────────────
@@ -105,6 +108,7 @@ function winc_get_plan_data()
     }
 
     $args     = array_merge(['timeout' => 5], winc_api_headers());
+
     $response = wp_remote_get('https://admin.wincstudio.co.uk/api/urls', $args);
 
     if (is_wp_error($response)) {
@@ -136,9 +140,9 @@ function winc_get_plan_data()
 function winc_plan_label($level)
 {
     $labels = [
-        1 => 'WINC Maintain',
-        2 => 'WINC Support',
-        3 => 'WINC Momentum',
+        1 => 'Maintain',
+        2 => 'Support',
+        3 => 'Momentum',
     ];
     return $labels[$level] ?? null;
 }
@@ -156,8 +160,8 @@ function winc_plan_description($level)
 function winc_plan_features($level)
 {
     $base     = ['Regular updates & security patches', 'Uptime monitoring', 'Monthly reporting'];
-    $support  = array_merge($base, ['Priority support', 'Dedicated point of contact']);
-    $momentum = array_merge($support, ['Ongoing development & new features', 'Content & strategy', 'Embedded team']);
+    $support  = ['Everything in Maintain,', 'Priority support', 'Dedicated point of contact'];
+    $momentum = ['Everything in Support,', 'Ongoing development & new features', 'Content & strategy', 'Embedded team'];
 
     $features = [
         1 => $base,
@@ -259,13 +263,16 @@ add_action('admin_head', function () {
         .winc-btn-outline {
             display: inline-block;
             font-size: var(--winc-font-base);
-            font-weight: 400;
+            font-weight: 300;
             padding: 13px 20px;
             border-radius: 4px;
             text-decoration: none;
             white-space: nowrap;
-            transition: background-color 0.3s, color 0.3s;
+            transition: background-color 0.3s, color 0.3s, border 0.3s ease;
             cursor: pointer;
+            line-height: 1;
+            height: auto;
+            text-align: center;
         }
 
         .winc-btn {
@@ -275,32 +282,58 @@ add_action('admin_head', function () {
         }
 
         .winc-btn:hover {
-            background: transparent;
+            background: var(--winc-black);
             color: var(--winc-green) !important;
+            border: 1px solid var(--winc-green);
         }
 
         .winc-btn-outline {
-            background: transparent;
-            border: 1px solid var(--winc-black);
-            color: var(--winc-black) !important;
+            background: var(--winc-black);
+            border: 1px solid var(--winc-green);
+            color: var(--winc-green) !important;
         }
 
         .winc-btn-outline:hover {
-            background: var(--winc-black);
+            background: var(--winc-green);
+            border: 1px solid var(--winc-green);
             color: var(--winc-white) !important;
+        }
+
+        /* ─── Normalise WP submit buttons on WINC pages ── */
+        .winc-page .button-primary,
+        .winc-page input[type="submit"].button-primary {
+            background: var(--winc-green) !important;
+            border-color: var(--winc-green) !important;
+            color: var(--winc-black) !important;
+            font-size: var(--winc-font-base);
+            font-weight: 300;
+            padding: 13px 20px;
+            border-radius: 4px;
+            height: auto;
+            line-height: 1;
+            box-shadow: none;
+            text-shadow: none;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+        }
+
+        .winc-page .button-primary:hover,
+        .winc-page input[type="submit"].button-primary:hover {
+            background: var(--winc-black) !important;
+            border-color: var(--winc-black) !important;
+            color: var(--winc-green) !important;
         }
 
         .winc-actions {
             display: flex;
             gap: 12px;
             flex-wrap: wrap;
-            margin-top: 20px;
+            margin-top: auto;
         }
 
         .winc-feature-list {
             list-style: none;
             padding: 0;
-            margin: 12px 0 0;
+            margin: 0 0 1rem 0;
         }
 
         .winc-feature-list li {
@@ -334,7 +367,7 @@ add_action('admin_head', function () {
 
         .winc-hero__plan {
             font-size: var(--winc-font-hero);
-            font-weight: 400;
+            font-weight: 300;
             color: var(--winc-white);
             margin: 0 0 10px;
             line-height: 1.2;
@@ -349,8 +382,10 @@ add_action('admin_head', function () {
         }
 
         .winc-hero__right {
-            flex-shrink: 0;
             text-align: right;
+            display: flex;
+            gap: 15px;
+            flex-direction: column;
         }
 
         .winc-hero__link {
@@ -382,7 +417,7 @@ add_action('admin_head', function () {
 
         .winc-page-hero h1 {
             font-size: var(--winc-font-hero);
-            font-weight: 400;
+            font-weight: 300;
             color: var(--winc-white);
             margin: 0 0 20px;
         }
@@ -392,6 +427,9 @@ add_action('admin_head', function () {
             color: var(--winc-muted);
             margin: 0;
             line-height: 1.5;
+            max-width: 50ch;
+            text-wrap: pretty;
+
         }
 
         .winc-page-hero .winc-feature-list li {
@@ -424,11 +462,13 @@ add_action('admin_head', function () {
             border-radius: 0 0 var(--winc-radius) var(--winc-radius);
             padding: 30px;
             margin-bottom: var(--winc-gap);
+            display: flex;
+            flex-direction: column;
         }
 
         .winc-card h3 {
             margin-top: 0;
-            font-size: 22px;
+            font-size: 27px;
             font-weight: 500;
         }
 
@@ -460,11 +500,14 @@ add_action('admin_head', function () {
             padding: 30px;
             display: flex;
             flex-direction: column;
-            transition: transform 0.25s ease, opacity 0.25s ease;
+            filter: blur(0px);
+            transition: transform 0.25s ease, opacity 0.25s ease, filter 0.25s ease;
         }
 
         .winc-plans-grid:has(.winc-plan-card:hover) .winc-plan-card:not(:hover) {
             opacity: 0.45;
+            filter: blur(1px);
+
         }
 
         .winc-plan-card:hover {
@@ -490,8 +533,8 @@ add_action('admin_head', function () {
 
         .winc-plan-card h3 {
             font-size: var(--winc-font-xl);
-            font-weight: 400;
-            margin: 0 0 16px;
+            font-weight: 300;
+            margin: 0 0 25px;
             color: var(--winc-black);
         }
 
@@ -504,7 +547,7 @@ add_action('admin_head', function () {
 
         .winc-plan-card .winc-feature-list {
             flex: 1;
-            margin-bottom: 28px;
+            margin: 0;
         }
 
         .winc-plan-card .winc-btn,
@@ -618,6 +661,10 @@ add_action('admin_head', function () {
             .winc-card {
                 padding: 20px;
             }
+
+            .winc-bottom-grid {
+                grid-template-columns: 1fr !important;
+            }
         }
     </style>
 <?php
@@ -662,12 +709,12 @@ add_action('admin_notices', function () {
         <div class="winc-hero">
             <div class="winc-hero__left">
                 <p class="winc-wordmark">WINC Admin</p>
-                <h2 class="winc-hero__plan"><?php echo esc_html($label); ?></h2>
+                <h2 class="winc-hero__plan"><span style="opacity: 0.7;">Package: </span><?php echo esc_html($label); ?></h2>
                 <p class="winc-hero__desc"><?php echo esc_html($desc); ?></p>
             </div>
             <div class="winc-hero__right">
-                <a href="<?php echo esc_url(admin_url('admin.php?page=winc-admin')); ?>" class="winc-btn">View your plan &rarr;</a>
-                <a href="https://wincstudio.co.uk/support" target="_blank" rel="noopener" class="winc-hero__link">Get support</a>
+                <a href="<?php echo esc_url(admin_url('admin.php?page=winc-admin')); ?>" class="winc-btn">View dashboard &rarr;</a>
+                <a href="https://wincstudio.co.uk/support" target="_blank" rel="noopener" class="winc-btn-outline">Get support</a>
             </div>
         </div>
     <?php else : ?>
@@ -707,7 +754,7 @@ function winc_dashboard_widget_content()
         $admin_url  = esc_url(admin_url('admin.php?page=winc-admin'));
         $next_label = winc_plan_label($level + 1);
     ?>
-        <p><strong><?php echo esc_html($label); ?></strong></p>
+        <p><strong><span style="opacity: 0.7;">Package: </span><?php echo esc_html($label); ?></strong></p>
         <ul class="winc-widget-features">
             <?php foreach ($features as $feature) : ?>
                 <li><?php echo esc_html($feature); ?></li>
@@ -787,49 +834,67 @@ function winc_settings_page()
             </div>
         <?php endif; ?>
 
-        <div class="winc-card" style="border-radius:6px">
-            <h3>API Key</h3>
-            <p>Your WINC Admin API key authenticates requests to the WINC platform. Keep it secret.</p>
-            <form method="post" action="options.php">
-                <?php settings_fields('winc_settings'); ?>
-                <div style="display:flex;align-items:center;gap:8px;max-width:420px">
-                    <input
-                        type="password"
-                        id="winc_api_key"
-                        name="winc_api_key"
-                        value="<?php echo esc_attr(get_option('winc_api_key', '')); ?>"
-                        class="regular-text"
-                        style="flex:1"
-                        autocomplete="new-password" />
-                    <button type="button" id="winc-toggle-key" class="button">Show</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+            <div class="winc-card" style="border-radius:6px;margin-bottom:0">
+                <h3>API Key</h3>
+                <p>Your WINC Admin API key authenticates requests to the WINC platform. Keep it secret.</p>
+                <form method="post" action="options.php">
+                    <?php settings_fields('winc_settings'); ?>
+                    <div style="display:flex;align-items:stretch;gap:10px">
+                        <input
+                            type="password"
+                            id="winc_api_key"
+                            name="winc_api_key"
+                            value="<?php echo esc_attr(get_option('winc_api_key', '')); ?>"
+                            class="regular-text"
+                            style="flex:1;min-width:0;height:auto;padding:12px 12px;box-sizing:border-box;font-size:18px;"
+                            autocomplete="new-password" />
+                        <button type="button" id="winc-toggle-key" class="winc-btn-outline">Show</button>
+                    </div>
+                    <div class="winc-actions">
+                        <?php submit_button('Save API Key', 'primary', 'submit', false); ?>
+                    </div>
+                </form>
+                <script>
+                    document.getElementById('winc-toggle-key').addEventListener('click', function() {
+                        var input = document.getElementById('winc_api_key');
+                        var hidden = input.type === 'password';
+                        input.type = hidden ? 'text' : 'password';
+                        this.textContent = hidden ? 'Hide' : 'Show';
+                    });
+                </script>
+            </div>
+
+            <div class="winc-card winc-card--muted" style="border-radius:6px;margin-bottom:0">
+                <h3>Register site</h3>
+                <p>Automatically register this site with WINC Studio and retrieve your API key.</p>
+                <div class="winc-actions" style="align-items:center">
+                    <button type="button" id="winc-register-btn" class="winc-btn">Register site</button>
+                    <span id="winc-register-notice" style="font-size:15px;color:#555"></span>
                 </div>
-                <div class="winc-actions">
-                    <?php submit_button('Save API Key', 'primary', 'submit', false); ?>
-                </div>
-            </form>
-            <script>
-                document.getElementById('winc-toggle-key').addEventListener('click', function() {
-                    var input = document.getElementById('winc_api_key');
-                    var hidden = input.type === 'password';
-                    input.type = hidden ? 'text' : 'password';
-                    this.textContent = hidden ? 'Hide' : 'Show';
-                });
-            </script>
+                <?php if ($has_key) : ?>
+                    <p style="margin-top:12px;font-size:14px;color:#888">
+                        Site already registered — click to re-register if you have changed domains.
+                    </p>
+                <?php endif; ?>
+            </div>
+
         </div>
 
-        <div class="winc-card winc-card--muted" style="border-radius:6px">
-            <h3>Register site</h3>
-            <p>Automatically register this site with WINC Studio and retrieve your API key.</p>
-            <div class="winc-actions" style="align-items:center">
-                <button type="button" id="winc-register-btn" class="winc-btn">Register site</button>
-                <span id="winc-register-notice" style="font-size:15px;color:#555"></span>
-            </div>
-            <?php if ($has_key) : ?>
-                <p style="margin-top:12px;font-size:14px;color:#888">
-                    Site already registered — click to re-register if you have changed domains.
-                </p>
-            <?php endif; ?>
-        </div>
+        <style>
+            @media (max-width: 782px) {
+                .winc-settings-grid {
+                    grid-template-columns: 1fr !important;
+                }
+            }
+        </style>
+        <script>
+            (function() {
+                var grid = document.querySelector('.winc-page > div[style*="grid"]');
+                if (grid) grid.classList.add('winc-settings-grid');
+            })();
+        </script>
 
     </div>
     <script>
@@ -905,6 +970,35 @@ add_action('wp_ajax_winc_register_site', function () {
     wp_send_json_error('Unexpected response from WINC Studio. Please try again.');
 });
 
+add_action('wp_ajax_winc_auth_token', function () {
+    if (! current_user_can('manage_options')) {
+        wp_send_json_error('Unauthorised.', 403);
+    }
+
+    check_ajax_referer('winc_auth_token', 'nonce');
+
+    $args     = array_merge(['timeout' => 10], winc_api_headers());
+    $response = wp_remote_post('https://admin.wincstudio.co.uk/api/auth/token', $args);
+
+    if (is_wp_error($response)) {
+        wp_send_json_error('Unable to connect — please try again.');
+    }
+
+    $code = wp_remote_retrieve_response_code($response);
+
+    if ($code === 404) {
+        wp_send_json_error('not_found');
+    }
+
+    $body = json_decode(wp_remote_retrieve_body($response), true);
+
+    if ($code === 200 && ! empty($body['login_url'])) {
+        wp_send_json_success(['login_url' => esc_url_raw($body['login_url'])]);
+    }
+
+    wp_send_json_error('Unexpected response from WINC Studio. Please try again.');
+});
+
 function winc_admin_page()
 {
     $plan     = winc_get_plan_data();
@@ -930,8 +1024,54 @@ function winc_admin_page()
             <?php if ($label) : ?>
                 <div class="winc-hero-inner">
                     <div class="winc-hero-inner__main">
-                        <h1><?php echo esc_html($label); ?></h1>
+                        <h1><span style="opacity: 0.7;">Package: </span><?php echo esc_html($label); ?></h1>
                         <p><?php echo esc_html($desc); ?></p>
+                        <?php if ($level >= 2) : ?>
+                            <div class="winc-actions" style="margin-top:24px;align-items:center">
+                                <button type="button" id="winc-auth-btn" class="winc-btn">Access your account &rarr;</button>
+                                <span id="winc-auth-notice" style="font-size:15px;color:var(--winc-muted)"></span>
+                            </div>
+                            <script>
+                                document.getElementById('winc-auth-btn').addEventListener('click', function() {
+                                    var btn = this;
+                                    var notice = document.getElementById('winc-auth-notice');
+                                    btn.disabled = true;
+                                    btn.textContent = 'Loading\u2026';
+                                    notice.textContent = '';
+
+                                    var data = new FormData();
+                                    data.append('action', 'winc_auth_token');
+                                    data.append('nonce', <?php echo wp_json_encode(wp_create_nonce('winc_auth_token')); ?>);
+
+                                    fetch(<?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>, {
+                                            method: 'POST',
+                                            body: data,
+                                        })
+                                        .then(function(r) {
+                                            return r.json();
+                                        })
+                                        .then(function(res) {
+                                            btn.disabled = false;
+                                            btn.textContent = 'Access your account \u2192';
+                                            if (res.success && res.data && res.data.login_url) {
+                                                window.location.href = res.data.login_url;
+                                            } else if (res.data === 'not_found') {
+                                                notice.style.color = '#f87171';
+                                                notice.textContent = 'No client account has been set up yet. Please contact WINC Studio.';
+                                            } else {
+                                                notice.style.color = '#f87171';
+                                                notice.textContent = res.data || 'Unable to connect \u2014 please try again.';
+                                            }
+                                        })
+                                        .catch(function() {
+                                            btn.disabled = false;
+                                            btn.textContent = 'Access your account \u2192';
+                                            notice.style.color = '#f87171';
+                                            notice.textContent = 'Unable to connect \u2014 please try again.';
+                                        });
+                                });
+                            </script>
+                        <?php endif; ?>
                     </div>
                     <?php if (! empty($features)) : ?>
                         <div class="winc-hero-inner__features">
@@ -1010,17 +1150,17 @@ function winc_admin_page()
             $chart_ms         = array_column($chart_data, 'ms');
             $chart_status     = array_column($chart_data, 'status');
         ?>
+
             <div class="winc-card">
                 <h3>Uptime monitoring</h3>
                 <div class="winc-uptime">
                     <span class="winc-uptime__dot"></span>
                     <div>
                         <div class="winc-uptime__label">Your site is being monitored</div>
-                        <div class="winc-uptime__url"><?php echo esc_html(home_url()); ?></div>
                     </div>
                 </div>
                 <?php if (! empty($chart_data)) : ?>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:24px 0;">
                         <div>
                             <p style="font-size:13px;color:#888;margin:0 0 8px">Response time (ms)</p>
                             <div id="winc-chart-ms"></div>
@@ -1156,30 +1296,40 @@ function winc_admin_page()
             $next_features = winc_plan_features($next_level);
             $new_features  = array_slice($next_features, count($features));
         ?>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--winc-gap)" class="winc-bottom-grid">
+                <div class="winc-card winc-card--muted" style="margin-bottom:0">
+                    <h3>Upgrade to <?php echo esc_html($next_label); ?></h3>
+                    <p><?php echo esc_html($next_desc); ?></p>
+                    <?php if (! empty($new_features)) : ?>
+                        <ul class="winc-feature-list">
+                            <?php foreach ($new_features as $feature) : ?>
+                                <li><?php echo esc_html($feature); ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                    <div class="winc-actions">
+                        <a href="https://wincstudio.co.uk/support" target="_blank" rel="noopener" class="winc-btn">Find out more &rarr;</a>
+                    </div>
+                </div>
+                <div class="winc-card winc-card--muted" style="margin-bottom:0">
+                    <h3>Need help?</h3>
+                    <p>Our team is here whenever you need us. Reach out via our support page or drop us an email.</p>
+                    <div class="winc-actions">
+                        <a href="https://wincstudio.co.uk/support" target="_blank" rel="noopener" class="winc-btn">Get support &rarr;</a>
+                        <a href="mailto:hello@wincstudio.co.uk" class="winc-btn-outline">Email us</a>
+                    </div>
+                </div>
+            </div>
+        <?php else : ?>
             <div class="winc-card winc-card--muted">
-                <h3>Upgrade to <?php echo esc_html($next_label); ?></h3>
-                <p><?php echo esc_html($next_desc); ?></p>
-                <?php if (! empty($new_features)) : ?>
-                    <ul class="winc-feature-list">
-                        <?php foreach ($new_features as $feature) : ?>
-                            <li><?php echo esc_html($feature); ?></li>
-                        <?php endforeach; ?>
-                    </ul>
-                <?php endif; ?>
+                <h3>Need help?</h3>
+                <p>Our team is here whenever you need us. Reach out via our support page or drop us an email.</p>
                 <div class="winc-actions">
-                    <a href="https://wincstudio.co.uk/support" target="_blank" rel="noopener" class="winc-btn">Find out more &rarr;</a>
+                    <a href="https://wincstudio.co.uk/support" target="_blank" rel="noopener" class="winc-btn">Get support &rarr;</a>
+                    <a href="mailto:hello@wincstudio.co.uk" class="winc-btn-outline">Email us</a>
                 </div>
             </div>
         <?php endif; ?>
-
-        <div class="winc-card winc-card--muted">
-            <h3>Need help?</h3>
-            <p>Our team is here whenever you need us. Reach out via our support page or drop us an email.</p>
-            <div class="winc-actions">
-                <a href="https://wincstudio.co.uk/support" target="_blank" rel="noopener" class="winc-btn">Get support &rarr;</a>
-                <a href="mailto:hello@wincstudio.co.uk" class="winc-btn-outline">Email us</a>
-            </div>
-        </div>
 
     </div>
 <?php
