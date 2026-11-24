@@ -66,7 +66,12 @@ function winc_agent_list_plugins()
         ];
     }
 
-    return ['plugins' => $out, 'site' => winc_agent_site_info()];
+    // Never let a host or CDN cache this: stale update info makes WINC Admin report "up to date".
+    $response = new WP_REST_Response(['plugins' => $out, 'site' => winc_agent_site_info()]);
+    $response->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0, private');
+    $response->header('Pragma', 'no-cache');
+
+    return $response;
 }
 
 /**
