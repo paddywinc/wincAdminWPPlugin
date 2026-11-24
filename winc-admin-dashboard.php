@@ -4,7 +4,7 @@
  * Plugin Name: WINC Admin Dashboard
  * Plugin URI:  https://wincstudio.co.uk
  * Description: WordPress plugin to sync with WINC Admin.
- * Version:     1.8.0
+ * Version:     1.9.0
  * Author:      WINC Studio
  * Author URI:  https://wincstudio.co.uk
  * License:     GPL-2.0-or-later
