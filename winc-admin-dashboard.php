@@ -673,33 +673,14 @@ add_action('admin_head', function () {
 
 // ─── Move hero after Dashboard h1 ─────────────────────────────────────────────
 
-add_action('admin_footer', function () {
-    $screen = get_current_screen();
-    if (! $screen || $screen->id !== 'dashboard') {
-        return;
-    }
-?>
-    <script>
-        (function() {
-            var hero = document.querySelector('.winc-hero');
-            var h1 = document.querySelector('#wpbody-content .wrap h1');
-            if (hero && h1) {
-                h1.after(hero);
-            }
-        })();
-    </script>
-    <?php
-});
+// ─── Hero panel (dashboard widget) ───────────────────────────────────────────
 
-
-// ─── Hero banner (dashboard only) ────────────────────────────────────────────
-
-add_action('admin_notices', function () {
-    $screen = get_current_screen();
-    if (! $screen || $screen->id !== 'dashboard') {
-        return;
-    }
-
+/**
+ * The WINC package panel. It's a dashboard widget (not an admin notice) so it sits with the
+ * other widgets instead of among WordPress's own notifications, and is moved to span both columns.
+ */
+function winc_dashboard_hero_content()
+{
     $plan  = winc_get_plan_data();
     $level = ($plan && isset($plan['level'])) ? $plan['level'] : 0;
     $label = winc_plan_label($level);
@@ -729,6 +710,66 @@ add_action('admin_notices', function () {
             </div>
         </div>
     <?php endif;
+}
+
+add_action('wp_dashboard_setup', function () {
+    wp_add_dashboard_widget('winc_dashboard_hero', 'WINC Package', 'winc_dashboard_hero_content');
+});
+
+// Dashboard only: strip the widget chrome and stretch it across both columns.
+add_action('admin_head-index.php', function () {
+    ?>
+    <style>
+        .winc-span-all {
+            margin: 0 8px 16px;
+        }
+
+        #winc_dashboard_hero.postbox {
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+            margin-bottom: 0;
+        }
+
+        #winc_dashboard_hero .postbox-header {
+            display: none;
+        }
+
+        #winc_dashboard_hero .inside {
+            margin: 0;
+            padding: 0;
+        }
+
+        #winc_dashboard_hero .winc-hero {
+            margin: 0;
+            padding: 48px 32px;
+            border-radius: 4px;
+        }
+
+        @media (max-width: 782px) {
+            #winc_dashboard_hero .winc-hero {
+                padding: 32px 20px;
+            }
+        }
+    </style>
+<?php
+});
+
+add_action('admin_footer-index.php', function () {
+?>
+    <script>
+        // WordPress places widgets in one of its columns; lift this one into a full-width row above them.
+        (function() {
+            var widget = document.getElementById('winc_dashboard_hero');
+            var wrap = document.getElementById('dashboard-widgets-wrap');
+            if (!widget || !wrap) return;
+            var row = document.createElement('div');
+            row.className = 'metabox-holder winc-span-all';
+            row.appendChild(widget);
+            wrap.insertBefore(row, wrap.firstChild);
+        })();
+    </script>
+<?php
 });
 
 
@@ -1006,38 +1047,8 @@ add_action('wp_ajax_winc_auth_token', function () {
  */
 function winc_upgrade_mailto($subject)
 {
-    return 'mailto:hello@wincstudio.co.uk?subject=' . rawurlencode($subject);
+    return 'mailto:paddy@wincstudio.co.uk?subject=' . rawurlencode($subject);
 }
-
-add_action('wp_ajax_winc_request_upgrade', function () {
-    if (! current_user_can('manage_options')) {
-        wp_send_json_error('Unauthorised.', 403);
-    }
-
-    check_ajax_referer('winc_request_upgrade', 'nonce');
-
-    $args = array_merge(
-        ['timeout' => 15, 'body' => ['plan' => isset($_POST['plan']) ? absint($_POST['plan']) : 0]],
-        winc_api_headers()
-    );
-
-    $response = wp_remote_post('https://admin.wincstudio.co.uk/api/upgrade-request', $args);
-
-    if (is_wp_error($response)) {
-        wp_send_json_error('Unable to reach WINC Studio — please try again.');
-    }
-
-    $code = wp_remote_retrieve_response_code($response);
-    $body = json_decode(wp_remote_retrieve_body($response), true);
-    $msg  = is_array($body) && ! empty($body['message']) ? sanitize_text_field($body['message']) : 'Something went wrong — please try again.';
-
-    if ($code === 200) {
-        wp_send_json_success($msg);
-    }
-
-    wp_send_json_error($msg);
-});
-
 
 function winc_admin_page()
 {
@@ -1348,9 +1359,8 @@ function winc_admin_page()
                         </ul>
                     <?php endif; ?>
                     <div class="winc-actions">
-                        <button type="button" class="winc-btn winc-upgrade-btn" data-plan="<?php echo esc_attr($next_level); ?>">Request upgrade &rarr;</button>
+                        <a href="<?php echo esc_url(winc_upgrade_mailto(get_bloginfo('name') . ': upgrade ' . $label . ' → ' . $next_label)); ?>" class="winc-btn">Request upgrade &rarr;</a>
                     </div>
-                    <p class="winc-upgrade-msg" role="status" style="margin:12px 0 0;font-size:15px;"></p>
                 </div>
                 <div class="winc-card winc-card--muted" style="margin-bottom:0">
                     <h3>Need help?</h3>
@@ -1361,42 +1371,6 @@ function winc_admin_page()
                     </div>
                 </div>
             </div>
-            <script>
-                (function() {
-                    var btn = document.querySelector('.winc-upgrade-btn');
-                    if (!btn) return;
-                    var msg = document.querySelector('.winc-upgrade-msg');
-                    btn.addEventListener('click', function() {
-                        btn.disabled = true;
-                        var data = new FormData();
-                        data.append('action', 'winc_request_upgrade');
-                        data.append('nonce', <?php echo wp_json_encode(wp_create_nonce('winc_request_upgrade')); ?>);
-                        data.append('plan', btn.dataset.plan);
-                        fetch(<?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>, {
-                                method: 'POST',
-                                body: data,
-                                credentials: 'same-origin'
-                            })
-                            .then(function(r) {
-                                return r.json();
-                            })
-                            .then(function(res) {
-                                msg.textContent = res.data || (res.success ? 'Request sent.' : 'Something went wrong.');
-                                msg.style.color = res.success ? '#0a7d4f' : '#b32d2e';
-                                if (res.success) {
-                                    btn.style.display = 'none';
-                                } else {
-                                    btn.disabled = false;
-                                }
-                            })
-                            .catch(function() {
-                                msg.textContent = 'Something went wrong \u2014 please try again.';
-                                msg.style.color = '#b32d2e';
-                                btn.disabled = false;
-                            });
-                    });
-                })();
-            </script>
         <?php else : ?>
             <div class="winc-card winc-card--muted">
                 <h3>Need help?</h3>

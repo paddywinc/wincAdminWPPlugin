@@ -66,7 +66,57 @@ function winc_agent_list_plugins()
         ];
     }
 
-    return ['plugins' => $out];
+    return ['plugins' => $out, 'site' => winc_agent_site_info()];
+}
+
+/**
+ * WordPress core, PHP and active theme versions, plus any updates waiting.
+ * Reported alongside the plugin list so WINC Admin can show site health.
+ */
+function winc_agent_site_info()
+{
+    require_once ABSPATH . 'wp-admin/includes/update.php';
+
+    // Core: refresh and look for an available upgrade.
+    if (function_exists('wp_version_check')) {
+        wp_version_check();
+    }
+    $core        = get_site_transient('update_core');
+    $core_update = null;
+    if ($core && ! empty($core->updates) && is_array($core->updates)) {
+        foreach ($core->updates as $candidate) {
+            if (isset($candidate->response) && $candidate->response === 'upgrade' && ! empty($candidate->version)) {
+                $core_update = $candidate->version;
+                break;
+            }
+        }
+    }
+
+    // Active theme and its update, if any.
+    if (function_exists('wp_update_themes')) {
+        wp_update_themes();
+    }
+    $theme         = wp_get_theme();
+    $theme_updates = get_site_transient('update_themes');
+    $stylesheet    = $theme->get_stylesheet();
+    $theme_update  = null;
+    if ($theme_updates && isset($theme_updates->response[$stylesheet]['new_version'])) {
+        $theme_update = $theme_updates->response[$stylesheet]['new_version'];
+    }
+
+    // PHP_VERSION can carry distro suffixes; keep just major.minor.patch.
+    preg_match('/^\d+\.\d+\.\d+/', PHP_VERSION, $php);
+
+    return [
+        'wp_version'        => get_bloginfo('version'),
+        'wp_update_version' => $core_update,
+        'php_version'       => $php[0] ?? PHP_VERSION,
+        'theme'             => [
+            'name'           => $theme->get('Name'),
+            'version'        => $theme->get('Version'),
+            'update_version' => $theme_update,
+        ],
+    ];
 }
 
 function winc_agent_update_plugin(WP_REST_Request $request)
