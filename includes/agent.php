@@ -124,6 +124,35 @@ function winc_agent_site_info()
     ];
 }
 
+/**
+ * WordPress deactivates a plugin while it swaps in the new files, and the Plugins screen
+ * switches it back on afterwards. We have to do that ourselves, whatever the outcome of
+ * the update, or an active plugin is left switched off.
+ *
+ * @return array{was_active:bool,active:bool,warning:?string}
+ */
+function winc_agent_restore_active($file, $was_active, $network_wide)
+{
+    $now_active = is_plugin_active($file) || (is_multisite() && is_plugin_active_for_network($file));
+
+    if (! $was_active || $now_active) {
+        return ['was_active' => (bool) $was_active, 'active' => (bool) $now_active, 'warning' => null];
+    }
+
+    // Silent, like the admin screen: no activation hooks, it simply goes back to how it was.
+    $result = activate_plugin($file, '', $network_wide, true);
+
+    if (is_wp_error($result)) {
+        return [
+            'was_active' => true,
+            'active'     => false,
+            'warning'    => 'WordPress could not switch the plugin back on: ' . $result->get_error_message(),
+        ];
+    }
+
+    return ['was_active' => true, 'active' => true, 'warning' => null];
+}
+
 function winc_agent_update_plugin(WP_REST_Request $request)
 {
     winc_agent_load_admin_includes();
@@ -138,8 +167,12 @@ function winc_agent_update_plugin(WP_REST_Request $request)
     $name = $plugins[$file]['Name'];
     $old  = $plugins[$file]['Version'];
 
+    // Remember whether it was on, so we can put it back.
+    $network    = is_multisite() && is_plugin_active_for_network($file);
+    $was_active = $network || is_plugin_active($file);
+
     if (! WP_Filesystem()) {
-        return ['success' => false, 'name' => $name, 'old_version' => $old, 'message' => 'WordPress cannot write to the filesystem directly on this host.'];
+        return ['success' => false, 'name' => $name, 'old_version' => $old, 'was_active' => $was_active, 'active' => $was_active, 'message' => 'WordPress cannot write to the filesystem directly on this host.'];
     }
 
     wp_update_plugins();
@@ -147,24 +180,28 @@ function winc_agent_update_plugin(WP_REST_Request $request)
     $upgrader = new Plugin_Upgrader(new Automatic_Upgrader_Skin());
     $result   = $upgrader->upgrade($file);
 
+    // Whatever happened, make sure a plugin that was active still is.
+    $restore = winc_agent_restore_active($file, $was_active, $network);
+
     if (is_wp_error($result)) {
-        return ['success' => false, 'name' => $name, 'old_version' => $old, 'message' => $result->get_error_message()];
+        return array_merge(['success' => false, 'name' => $name, 'old_version' => $old, 'message' => $result->get_error_message()], $restore);
     }
 
     if ($result === false || $result === null) {
         $errors = $upgrader->skin->get_errors();
         $msg    = is_wp_error($errors) && $errors->has_errors() ? $errors->get_error_message() : 'No update available or the upgrade failed.';
-        return ['success' => false, 'name' => $name, 'old_version' => $old, 'message' => $msg];
+
+        return array_merge(['success' => false, 'name' => $name, 'old_version' => $old, 'message' => $msg], $restore);
     }
 
     wp_clean_plugins_cache();
     $new = get_plugins()[$file]['Version'] ?? null;
 
-    return [
+    return array_merge([
         'success'     => $new !== $old,
         'name'        => $name,
         'old_version' => $old,
         'new_version' => $new,
         'message'     => $new !== $old ? 'Updated.' : 'Plugin version did not change.',
-    ];
+    ], $restore);
 }
